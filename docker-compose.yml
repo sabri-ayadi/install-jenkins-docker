@@ -1,44 +1,44 @@
-version: '3.7'
+# source file : https://www.tiuweehan.com/blog/2020-09-10-docker-in-jenkins-in-docker/
+# No need for Dockerfile
 
 services:
-  jenkins-docker:
+  dind:
     image: docker:dind
-    container_name: jenkins-docker
     privileged: true
-    environment:
-      - DOCKER_TLS_CERTDIR=/certs
-    volumes:
-      - jenkins-docker-certs:/certs/client
-      - jenkins-data:/var/jenkins_home
-    ports:
-      - "2376:2376"
+    container_name: dind
+    expose:
+      - 2375
     networks:
-      jenkins:
-        aliases:
-          - docker
-    command: --storage-driver overlay2
+      - jenkins_dind
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dind-storage:/var/lib/docker
 
-  my-jenkins:
-    image: my-jenkins
-    container_name: my-jenkins
-    restart: on-failure
-    environment:
-      - DOCKER_HOST=tcp://docker:2376
-      - DOCKER_CERT_PATH=/certs/client
-      - DOCKER_TLS_VERIFY=1
-    volumes:
-      - jenkins-data:/var/jenkins_home
-      - jenkins-docker-certs:/certs/client:ro
+  jenkins:
+    image: jenkins/jenkins:lts
+    user: jenkins
+    container_name: jenkins
+    depends_on:
+      - dind
     ports:
-      - "8080:8080"
-      - "50000:50000"
+      - 7070:8080
+      - 50000:50000
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    environment:
+      DOCKER_HOST: "tcp://dind:2375"
+      JENKINS_OPTS: "--httpPort=8080"
     networks:
-      - jenkins
+      - jenkins_dind
 
 networks:
-  jenkins:
+  jenkins_dind:
     driver: bridge
 
 volumes:
-  jenkins-docker-certs:
-  jenkins-data:
+  jenkins_home:
+    name: jenkins_home
+  dind-storage:
+    name: dind-storage
+

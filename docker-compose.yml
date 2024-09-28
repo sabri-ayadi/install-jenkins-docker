@@ -17,7 +17,7 @@ services:
 
   jenkins:
     image: jenkins/jenkins:lts
-    user: jenkins
+    user: root  # Temporarily use root to install Docker CLI
     container_name: jenkins
     depends_on:
       - dind
@@ -26,11 +26,18 @@ services:
       - 50000:50000
     volumes:
       - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DOCKER_HOST: "tcp://dind:2375"
       JENKINS_OPTS: "--httpPort=8080"
     networks:
       - jenkins_dind
+    command: |
+      bash -c "
+        curl -fsSL https://get.docker.com | sh
+        usermod -aG docker jenkins
+        su jenkins -c '/usr/local/bin/jenkins.sh'
+      "
 
 networks:
   jenkins_dind:
@@ -41,4 +48,3 @@ volumes:
     name: jenkins_home
   dind-storage:
     name: dind-storage
-

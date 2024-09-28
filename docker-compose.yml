@@ -1,23 +1,27 @@
 # source file : https://www.tiuweehan.com/blog/2020-09-10-docker-in-jenkins-in-docker/
 # No need for Dockerfile
 
+version: '3.8'
+
 services:
   dind:
     image: docker:dind
     privileged: true
     container_name: dind
     expose:
-      - 2375
-    networks:
-      - jenkins_dind
+      - 2376
     environment:
-      DOCKER_TLS_CERTDIR: ""
+      DOCKER_TLS_CERTDIR: /certs
     volumes:
+      - jenkins-docker-certs:/certs/client
+      - jenkins-data:/var/jenkins_home
       - dind-storage:/var/lib/docker
+    networks:
+      - jenkins-network
 
   jenkins:
     image: jenkins/jenkins:lts
-    user: root  # Temporarily use root to install Docker CLI
+    user: root
     container_name: jenkins
     depends_on:
       - dind
@@ -25,26 +29,33 @@ services:
       - 7070:8080
       - 50000:50000
     volumes:
-      - jenkins_home:/var/jenkins_home
+      - jenkins-data:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client:ro
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      DOCKER_HOST: "tcp://dind:2375"
-      JENKINS_OPTS: "--httpPort=8080"
-    networks:
-      - jenkins_dind
-    command: |
+      DOCKER_HOST: tcp://dind:2376
+      DOCKER_CERT_PATH: /certs/client
+      DOCKER_TLS_VERIFY: 1
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false
+    command: >
       bash -c "
-        curl -fsSL https://get.docker.com | sh
+        apt-get update && apt-get install -y docker-ce-cli
+        groupadd -g 999 docker
         usermod -aG docker jenkins
-        su jenkins -c '/usr/local/bin/jenkins.sh'
+        jenkins-plugin-cli --plugins docker-workflow blueocean
+        /usr/local/bin/jenkins.sh
       "
+    networks:
+      - jenkins-network
 
 networks:
-  jenkins_dind:
+  jenkins-network:
     driver: bridge
 
 volumes:
-  jenkins_home:
-    name: jenkins_home
+  jenkins-data:
+    name: jenkins-data
+  jenkins-docker-certs:
+    name: jenkins-docker-certs
   dind-storage:
     name: dind-storage
